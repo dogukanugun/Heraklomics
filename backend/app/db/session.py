@@ -15,7 +15,8 @@ SessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
-    autocommit=False
+    autocommit=False,
+    autoflush=False,
 )
 
 async def get_db():

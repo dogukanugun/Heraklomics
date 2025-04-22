@@ -3,14 +3,16 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
 from pathlib import Path
 from typing import Literal, Optional
-from app.api.dependencies import get_current_user
-from app.db.models import User
+from app.dependencies import get_current_user
+from app.db.models import User, UploadRecord
 from app.db.session import get_db
-from app.db.crud import create_upload_record
+from app.db.crud import create_upload_record, update_upload_status
 from app.schemas.analysis import UploadRecordResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 from tasks.run_pipeline import run_pipeline  # Celery task import
+from app.schemas.analysis import SarekRunOptions
+
 
 router = APIRouter()
 BASE_UPLOAD_DIR = Path("data/uploads")
@@ -58,21 +60,29 @@ async def upload_file(
     return upload_record
 
 
+
+
+router = APIRouter()
+
 @router.post("/run/{upload_id}")
 async def trigger_pipeline(
     upload_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    opts: SarekRunOptions,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     upload = await db.get(UploadRecord, upload_id)
     if not upload or upload.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Upload not found.")
-
+        raise HTTPException(404, "Upload not found")
     if upload.status != "uploaded":
-        raise HTTPException(status_code=400, detail=f"Upload already processed or in progress: {upload.status}")
+        raise HTTPException(400, f"Cannot start: status is {upload.status}")
 
-    # Enqueue job
-    run_pipeline.delay(upload_id, upload.saved_path, upload.analysis_type)
-
+    # enqueue with mode + any advanced args
+    run_pipeline.delay(
+        upload_id=upload_id,
+        file_path=upload.saved_path,
+        analysis_type=upload.analysis_type,
+        opts=opts.dict()
+    )
     await update_upload_status(db, upload_id, "queued")
-    return {"message": "Pipeline execution started.", "upload_id": upload_id}
+    return {"message": "Pipeline queued", "upload_id": upload_id}

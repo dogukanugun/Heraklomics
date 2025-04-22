@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import users, analysis, files
+from app.api import users, files
 from app.core.config import settings
 
 app = FastAPI(
@@ -21,7 +21,6 @@ app.add_middleware(
 
 # Register routers
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 
 @app.get("/")
